@@ -1,6 +1,7 @@
 import lal
 import lalpulsar
 import numpy as np
+import math
 
 from .parfile import PulsarParameters
 from .utils import (
@@ -391,6 +392,28 @@ class HeterodynedCWSimulator(object):
         else:
             parupdate = self.hetpar
 
+        if "TSTART" in parupdate.keys():
+            TSTART = parupdate["TSTART"]
+            transient = True
+
+            mask = np.zeros(len(self.times))
+                        
+            if "DECAY" in parupdate.keys():
+                DECAY = parupdate["DECAY"]
+                idx = np.argwhere(self.times>TSTART)
+                mask[idx] = np.exp(-(self.times[idx]-TSTART)/DECAY)
+            elif "DURATION" in parupdate.keys():
+                DURATION = parupdate["DURATION"]
+                idx = np.argwhere((self.times>TSTART) & (self.times<TSTART+DURATION))
+                mask[idx] = 1.0
+            elif "DURATION" and "DECAY" not in parupdate.keys():
+                idx = np.argwhere(self.times>TSTART)
+                mask[idx] = 1.0
+        
+        else:
+            transient = False
+            mask = 1.0
+
         # get signal amplitude model
         self.__nonGR = self._check_nonGR(parupdate)
         compstrain = lalpulsar.HeterodynedPulsarGetAmplitudeModel(
@@ -403,8 +426,9 @@ class HeterodynedCWSimulator(object):
             self.resp,
         )
 
-        if (not outputampcoeffs and newpar is None) or roq or outputampcoeffs:
-            return compstrain.data.data
+        if (not outputampcoeffs and (transient or newpar is None)) or roq or outputampcoeffs:
+            return compstrain.data.data * mask
+            #return np.dot(compstrain.data.data, mask)
         else:
             from .heterodyne.fastheterodyne import fast_heterodyne
 
@@ -500,6 +524,8 @@ class HeterodynedCWSimulator(object):
 
                 # get phase difference
                 self._phasediff = freqfactor * (phaseorig - phasenew).astype(float)
+
+            compstrain.data.data *= mask
 
             # re-heterodyne with phase difference
             return fast_heterodyne(compstrain.data.data, self.phasediff)

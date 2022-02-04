@@ -682,6 +682,21 @@ class PulsarParameters:
         with open(filename, "r") as fp:
             self._parcontent = fp.read()
 
+        for joe in self._parcontent.split("\n"):
+            if "TSTART" in joe:
+                TSTART = float(joe.split()[1])
+                self["TSTART"] = TSTART
+            if "DURATION" in joe:
+                DURATION = float(joe.split()[1])
+                self["DURATION"] = DURATION
+            if "TEND" in joe:
+                DURATION = float(joe.split()[1]) - TSTART
+                self["DURATION"] = DURATION
+            if "DECAY" in joe:
+                DECAY = float(joe.split()[1])
+                self["DECAY"] = DECAY
+
+
     def get_error(self, name):
         """
         Return the error value for a particular parameter

@@ -72,6 +72,8 @@ class TargetedPulsarLikelihood(bilby.core.likelihood.Likelihood):
         "DIST",
     ]
 
+    TRANSIENT_PARAMS = ["TSTART", "DURATION", "DECAY"]
+
     # amplitude parameters for the "source" model
     SOURCE_AMPLITUDE_PARAMETERS = [
         "H0",
@@ -206,6 +208,7 @@ class TargetedPulsarLikelihood(bilby.core.likelihood.Likelihood):
                 not in self.AMPLITUDE_PARAMS
                 + self.BINARY_PARAMS
                 + self.POSITIONAL_PARAMETERS
+                + self.TRANSIENT_PARAMS
             ) and not self._is_vector_param(key.upper()):
                 raise ValueError("Unknown parameter '{}' being used!".format(key))
 
@@ -262,10 +265,9 @@ class TargetedPulsarLikelihood(bilby.core.likelihood.Likelihood):
             newpar = deepcopy(het.par)
             self.basepars.append(newpar)
 
-        # if phase evolution is not in the model set the pre-summed products
-        # of the data and antenna patterns
-        if not self.include_phase:
-            self.dot_products()
+        
+        # set the pre-summed products of the data and antenna patterns
+        self.dot_products()
 
     @property
     def likelihood(self):
