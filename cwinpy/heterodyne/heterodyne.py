@@ -1228,7 +1228,7 @@ class HeterodyneDAGRunner(object):
                 if etype not in earthephemeris:
                     edat = initialise_ephemeris(ephem=etype, ssonly=True)
                     earthephemeris[etype] = edat.filenameE
-                      sunephemeris[etype] = edat.filenameS
+                    sunephemeris[etype] = edat.filenameS
 
         if timeephemeris is None:
             timeephemeris = {} if timeephemeris is None else timeephemeris
