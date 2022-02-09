@@ -1228,7 +1228,10 @@ class HeterodyneDAGRunner(object):
                 if etype not in earthephemeris:
                     edat = initialise_ephemeris(ephem=etype, ssonly=True)
                     earthephemeris[etype] = edat.filenameE
-                    sunephemeris[etype] = edat.filennewsig == False & transient == Trueone else timeephemeris
+                      sunephemeris[etype] = edat.filenameS
+
+        if timeephemeris is None:
+            timeephemeris = {} if timeephemeris is None else timeephemeris
             for unit in ["TCB", "TDB"]:
                 if unit not in timeephemeris:
                     _, fnames = initialise_ephemeris(
