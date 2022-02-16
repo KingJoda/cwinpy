@@ -426,7 +426,7 @@ class PERunner(object):
             self.datakwargs = convert_string_to_dict(kwargs.get("data_kwargs", "{}"))
         except AttributeError:
             # value is already a dictionary
-            self.datakwargs = kwargs["data_kwargs"].copy()
+            self.datakwargs = copy.deepcopy(kwargs["data_kwargs"])
 
         if "par_file" in kwargs:
             self.datakwargs["par"] = kwargs["par_file"]
