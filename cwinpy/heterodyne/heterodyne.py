@@ -439,9 +439,9 @@ expected evolution of the gravitational-wave signal from a set of pulsars."""
 
     cfparser = parser.add_argument_group("Configuration inputs")
     cfparser.add(
-        "--cwinpy-heterodyne-dag-config-file",
+        "--cwinpy-heterodyne-pipeline-config-file",
         help=(
-            "A path to the cwinpy_heterodyne_dag configuration file can be "
+            "A path to the cwinpy_heterodyne_pipeline configuration file can be "
             "supplied if this was has been used to setup the heterodyne job."
         ),
     )
@@ -595,9 +595,7 @@ def create_heterodyne_merge_parser():
         help=("A path, or list of paths, to heterodyned data files to merge together."),
     )
     parser.add(
-        "--output",
-        type=str,
-        help=("The output file for the merged heterodyned data."),
+        "--output", type=str, help=("The output file for the merged heterodyned data.")
     )
     parser.add(
         "--overwrite",
@@ -864,7 +862,9 @@ class HeterodyneDAGRunner(object):
                     if isinstance(finfo, dict):
                         for key, value in finfo.copy().items():
                             if isinstance(value, str):
-                                finfo[key] = [value] * len(fullstarttimes[key])
+                                finfo[key] = [
+                                    value for _ in range(len(fullstarttimes[key]))
+                                ]
                             elif isinstance(value, list):
                                 if len(value) != len(fullstarttimes[key]):
                                     raise ValueError(
@@ -909,7 +909,9 @@ class HeterodyneDAGRunner(object):
                 if isinstance(sinfo, dict):
                     for key, value in sinfo.copy().items():
                         if isinstance(value, str):
-                            sinfo[key] = [value] * len(fullstarttimes[key])
+                            sinfo[key] = [
+                                value for _ in range(len(fullstarttimes[key]))
+                            ]
                         elif isinstance(value, list):
                             if len(value) != len(fullstarttimes[key]):
                                 raise ValueError(
@@ -957,7 +959,7 @@ class HeterodyneDAGRunner(object):
                     else:
                         frinfo["framecache"] = framecaches[det][i]
                     frinfo["channel"] = channels[det][i]
-                    framedata[det].append(frinfo.copy())
+                    framedata[det].append(copy.deepcopy(frinfo))
 
                     seginfo = {}
                     if segmentlists is not None:
@@ -1000,7 +1002,7 @@ class HeterodyneDAGRunner(object):
                             server=segmentserver,
                         )
 
-                    segmentdata[det].append(seginfo.copy())
+                    segmentdata[det].append(copy.deepcopy(seginfo))
         elif joblength > 0:
             starttimes = {det: [] for det in detectors}
             endtimes = {det: [] for det in detectors}
@@ -1118,18 +1120,16 @@ class HeterodyneDAGRunner(object):
                         endtimes[det].append(int(curend))
 
                         # append frame data for jobs
-                        framedata[det].append(frinfo.copy())
+                        framedata[det].append(copy.deepcopy(frinfo))
 
-                        segmentdata[det].append(seginfo.copy())
+                        segmentdata[det].append(copy.deepcopy(seginfo))
                     idx += 1
         else:
             raise ValueError("Length of each job must be a positive integer")
 
         # create Heterodyne object to get pulsar parameter file information
         het = Heterodyne(
-            pulsarfiles=pulsarfiles,
-            pulsars=pulsars,
-            heterodyneddata=heterodyneddata,
+            pulsarfiles=pulsarfiles, pulsars=pulsars, heterodyneddata=heterodyneddata
         )
 
         # get number over which to split up pulsars
@@ -1214,7 +1214,7 @@ class HeterodyneDAGRunner(object):
             etypes.append(par["EPHEM"] if par["EPHEM"] is not None else "DE405")
             if par["BINARY"] is not None:
                 binarymodels.append(par["BINARY"])
-        self.pulsar_files = het.pulsarfiles.copy()
+        self.pulsar_files = copy.deepcopy(het.pulsarfiles)
 
         # remove duplicates
         etypes = set(etypes)
@@ -1247,7 +1247,8 @@ class HeterodyneDAGRunner(object):
                 [earthephemeris, sunephemeris, timeephemeris], ["earth", "sun", "time"]
             ):
                 if (
-                    len(set([os.path.basename(edat[etype]) for etype in edat])) != len(edat)
+                    len(set([os.path.basename(edat[etype]) for etype in edat]))
+                    != len(edat)
                     and len(edat) > 1
                 ):
                     for etype in edat:
@@ -1402,8 +1403,7 @@ class HeterodyneDAGRunner(object):
                                 tmphet.starttime = starttimes[det][0]
                                 tmphet.endtime = endtimes[det][-1]
                                 self.mergeoutputs[det][ff][psr] = os.path.join(
-                                    outputdirs[0][det],
-                                    tmphet.outputfiles[psr],
+                                    outputdirs[0][det], tmphet.outputfiles[psr]
                                 )
 
                         configdict["output"] = outputdirs[0][det]
@@ -1563,9 +1563,9 @@ class HeterodyneDAGRunner(object):
         return newobj
 
 
-def heterodyne_dag(**kwargs):
+def heterodyne_pipeline(**kwargs):
     """
-    Run heterodyne_dag within Python. This will create a `HTCondor <https://htcondor.readthedocs.io/>`_
+    Run heterodyne_pipeline within Python. This will create a `HTCondor <https://htcondor.readthedocs.io/>`_
     DAG for running multiple ``cwinpy_heterodyne`` instances on a computer cluster. Optional
     parameters that can be used instead of a configuration file (for "quick setup") are given in
     the "Other parameters" section.
@@ -1810,16 +1810,43 @@ def heterodyne_dag(**kwargs):
             # add heterodyne settings
             configfile["heterodyne"] = {}
             configfile["heterodyne"]["detectors"] = str(detectors)
-            configfile["heterodyne"]["starttimes"] = str(
-                {det: runtimes[run][det][0] for det in detectors}
-            )
-            configfile["heterodyne"]["endtimes"] = str(
-                {det: runtimes[run][det][1] for det in detectors}
-            )
 
-            configfile["heterodyne"]["frametypes"] = str(
-                {det: CVMFS_GWOSC_DATA_TYPES[run][srate][det] for det in detectors}
-            )
+            if run == "O3":
+                # for full O3 we need to set times for O3a and O3b separately
+                configfile["heterodyne"]["starttimes"] = str(
+                    {
+                        det: [runtimes[o3run][det][0] for o3run in ["O3a", "O3b"]]
+                        for det in detectors
+                    }
+                )
+                configfile["heterodyne"]["endtimes"] = str(
+                    {
+                        det: [runtimes[o3run][det][1] for o3run in ["O3a", "O3b"]]
+                        for det in detectors
+                    }
+                )
+
+                configfile["heterodyne"]["frametypes"] = str(
+                    {
+                        det: [
+                            CVMFS_GWOSC_DATA_TYPES[o3run][srate][det]
+                            for o3run in ["O3a", "O3b"]
+                        ]
+                        for det in detectors
+                    }
+                )
+            else:
+                configfile["heterodyne"]["starttimes"] = str(
+                    {det: runtimes[run][det][0] for det in detectors}
+                )
+                configfile["heterodyne"]["endtimes"] = str(
+                    {det: runtimes[run][det][1] for det in detectors}
+                )
+
+                configfile["heterodyne"]["frametypes"] = str(
+                    {det: CVMFS_GWOSC_DATA_TYPES[run][srate][det] for det in detectors}
+                )
+
             configfile["heterodyne"]["channels"] = str(
                 {det: CVMFS_GWOSC_FRAME_CHANNELS[run][srate][det] for det in detectors}
             )
@@ -1874,10 +1901,10 @@ def heterodyne_dag(**kwargs):
     return HeterodyneDAGRunner(config, **kwargs)
 
 
-def heterodyne_dag_cli(**kwargs):  # pragma: no cover
+def heterodyne_pipeline_cli(**kwargs):  # pragma: no cover
     """
-    Entry point to the cwinpy_heterodyne_dag script. This just calls
-    :func:`cwinpy.heterodyne.heterodyne_dag`, but does not return any objects.
+    Entry point to the cwinpy_heterodyne_pipeline script. This just calls
+    :func:`cwinpy.heterodyne.heterodyne_pipeline`, but does not return any objects.
     """
 
-    _ = heterodyne_dag(**kwargs)
+    _ = heterodyne_pipeline(**kwargs)
